@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario y Ventas de Ropa</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+        /* Base styles and Dark Mode setup */
+        :root {
+            --color-primary: #3b82f6; /* blue-500 */
+            --color-secondary: #10b981; /* emerald-500 */
+        }
+        
+        .dark {
+            --bg-color: #1f2937; /* Gray-800 */
+            --text-color: #f3f4f6; /* Gray-100 */
+            --card-bg: #374151; /* Gray-700 */
+            --input-bg: #4b5563; /* Gray-600 */
+            --border-color: #4b5563;
+        }
+
+        html {
+            transition: background-color 0.3s, color 0.3s;
+            background-color: #f3f4f6; /* Gray-100 */
+            color: #1f2937; /* Gray-800 */
+        }
+
+        .dark html {
+             background-color: var(--bg-color);
+             color: var(--text-color);
+        }
+
+        /* Active tab styling */
+        .tab-active {
+            border-bottom: 4px solid var(--color-primary);
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        /* Modal specific styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+        
+        /* Notification styling */
+        #notificaciones {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        .notificacion-item {
+            padding: 12px 20px;
+            margin-bottom: 10px;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            transition: opacity 0.5s ease-out;
+        }
+        .bg-success { background-color: #10b981; color: white; }
+        .bg-error { background-color: #ef4444; color: white; }
+        .bg-info { background-color: #3b82f6; color: white; }
+        
+        /* Responsive table styles for mobile */
+        @media (max-width: 768px) {
+            .tabla-container table, .tabla-container thead, .tabla-container tbody, .tabla-container th, .tabla-container td, .tabla-container tr { 
+                display: block; 
+            }
+            .tabla-container thead tr { 
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            .tabla-container tr { border: 1px solid #4b5563; margin-bottom: 10px; }
+            .tabla-container td { 
+                border: none;
+                border-bottom: 1px solid #e5e7eb; 
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            .tabla-container td:before { 
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%; 
+                padding-right: 10px; 
+                white-space: nowrap;
+                content: attr(data-label);
+                font-weight: bold;
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased transition-colors duration-300">
+
+<!-- ====================================== -->
+<!-- MODAL DE INICIO DE SESIÓN (LOGIN POR CONTRASEÑA) -->
+<!-- ====================================== -->
+<div id="login-modal" class="modal">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl max-w-md w-full">
+        <h2 class="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Inicio de Sesión</h2>
+        <p class="mb-6 text-gray-600 dark:text-gray-400">Ingrese la contraseña para acceder al sistema.</p>
+        
+        <form id="form-login" class="space-y-4">
+            <div>
+                <label for="password-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
+                <input type="password" id="password-input" required placeholder="Ingrese su contraseña" 
+                       class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <button type="submit" class="w-full py-3 rounded-lg shadow-md font-semibold transition duration-200 bg-blue-600 hover:bg-blue-700 text-white">
+                Acceder
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- ====================================== -->
+<!-- MODAL DE EDICIÓN DE PRODUCTO -->
+<!-- ====================================== -->
+<div id="edit-modal" class="modal hidden">
+    <div class="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl max-w-lg w-full">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Editar Producto</h2>
+        
+        <form id="form-editar-producto" class="space-y-4">
+            <input type="hidden" id="edit-id">
+
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Código (No editable en el modal, solo visualización) -->
+                <div>
+                    <label for="edit-codigo" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Código</label>
+                    <input type="text" id="edit-codigo" disabled 
+                           class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600">
+                </div>
+                 <!-- Talla (Se puede cambiar si aplica) -->
+                <div>
+                    <label for="edit-talla" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Talla</label>
+                    <select id="edit-talla" required class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Seleccionar Talla</option>
+                        <optgroup label="Ropa">
+                            <option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>U</option>
+                        </optgroup>
+                        <optgroup label="Calzado (EU)">
+                            <option>32</option><option>33</option><option>34</option><option>35</option><option>36</option>
+                            <option>37</option><option>38</option><option>39</option><option>40</option><option>41</option>
+                            <option>42</option><option>43</option><option>44</option><option>45</option><option>46</option>
+                            <option>47</option><option>48</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Nombre -->
+            <div>
+                <label for="edit-nombre" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nombre</label>
+                <input type="text" id="edit-nombre" required 
+                       class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Color -->
+                <div>
+                    <label for="edit-color" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Color</label>
+                    <input type="text" id="edit-color" required 
+                           class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <!-- Precio -->
+                <div>
+                    <label for="edit-precio" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Precio ($)</label>
+                    <input type="number" id="edit-precio" min="0" step="0.01" required 
+                           class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Cantidad (Stock) -->
+            <div>
+                <label for="edit-cantidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Cantidad (Stock)</label>
+                <input type="number" id="edit-cantidad" min="0" required 
+                       class="mt-1 w-full p-3 border rounded-lg shadow-sm bg-gray-50 dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4">
+                <button type="button" onclick="hideEditModal()" class="py-2 px-4 rounded-lg shadow-md font-semibold transition duration-200 bg-gray-300 hover:bg-gray-400 text-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-white">
+                    Cancelar
+                </button>
+                <button type="submit" class="py-2 px-4 rounded-lg shadow-md font-semibold transition duration-200 bg-blue-600 hover:bg-blue-700 text-white">
+                    Guardar Cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- Notificaciones / Message Box -->
+<div id="notificaciones" class="notificaciones"></div>
+
+<header class="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-blue-600 dark:text-blue-400">GIOR & CO.</h1>
+        <div class="flex items-center space-x-4">
+            <span id="current-user-info" class="text-sm font-semibold text-gray-700 dark:text-gray-300"></span>
+            <!-- Toggle para Modo Oscuro -->
+            <div class="switch select-none flex items-center p-2 rounded-full cursor-pointer bg-gray-100 dark:bg-gray-700" id="toggle-dark" title="Modo oscuro">
+                <span class="dot w-4 h-4 rounded-full bg-blue-500 dark:bg-yellow-400 mr-2 transition-all duration-300"></span>
+                <span id="dark-mode-label" class="text-sm font-medium text-gray-700 dark:text-gray-300">Dark</span>
+            </div>
+            <button onclick="showLoginModal()" class="py-1 px-3 bg-gray-200 dark:bg-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition">
+                Cerrar Sesión
+            </button>
+        </div>
+    </div>
+    
+    <!-- Navegación por Pestañas -->
+    <nav class="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-4">
+            <button id="tab-inventario" data-tab="inventario" class="tab-button py-3 px-4 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition duration-150 ease-in-out border-b-4 border-transparent tab-active">
+                📦 Inventario
+            </button>
+            <button id="tab-ventas" data-tab="ventas" class="tab-button py-3 px-4 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition duration-150 ease-in-out border-b-4 border-transparent">
+                💰 Registro de Ventas
+            </button>
+        </div>
+    </nav>
+</header>
+
+<!-- Contenido principal de la aplicación. Inicialmente oculto hasta que se seleccione un perfil. -->
+<main id="app-content" class="p-4 md:p-8 space-y-8 hidden">
+    
+    <!-- ====================================== -->
+    <!-- MÓDULO DE INVENTARIO -->
+    <!-- ====================================== -->
+    <div id="module-inventario" class="tab-content max-w-7xl mx-auto space-y-8">
+
+        <!-- 📊 DASHBOARD DE ESTADÍSTICAS (SIEMPRE VISIBLE) -->
+        <section id="dashboard" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-blue-500 dark:border-blue-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Total de productos</h3>
+                <p id="stat-total" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">0</p>
+            </div>
+            
+            <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-red-500 dark:border-red-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Productos agotados</h3>
+                <p id="stat-agotados" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">0</p>
+            </div>
+            
+            <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-amber-500 dark:border-amber-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Stock bajo (&le; 5)</h3>
+                <p id="stat-bajo" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">0</p>
+            </div>
+
+            <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-emerald-500 dark:border-emerald-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Valor total inventario</h3>
+                <p id="stat-valor" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">$0</p>
+            </div>
+        </section>
+
+        <!-- 📈 GRÁFICOS (Charts.js) - VISIBLE SOLO PARA ADMIN -->
+        <div id="inventory-charts-section" class="charts grid grid-cols-1 lg:grid-cols-2 gap-6 hidden">
+            <div class="chart-card bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+                <h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Estado de stock</h4>
+                <div style="height:250px;">
+                    <canvas id="chart-stock-pie"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+                <h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Top 5 Productos Más Vendidos (Stock Actual)</h4>
+                <div style="height:250px;">
+                    <canvas id="chart-top-bar"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ➕ FORMULARIO DE AGREGAR PRODUCTO (SOLO ADMIN) -->
+        <section id="add-product-section" class="form-container bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Agregar Producto</h2>
+            <form id="form-producto" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <input type="text" id="codigo" required placeholder="Código" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                <input type="text" id="nombre" required placeholder="Nombre" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                <select id="talla" required class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                    <option value="">Talla</option>
+                    <optgroup label="Ropa">
+                        <option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>U</option>
+                    </optgroup>
+                    <optgroup label="Calzado (EU)">
+                        <option>32</option><option>33</option><option>34</option><option>35</option><option>36</option>
+                        <option>37</option><option>38</option><option>39</option><option>40</option><option>41</option>
+                        <option>42</option><option>43</option><option>44</option><option>45</option><option>46</option>
+                        <option>47</option><option>48</option>
+                    </optgroup>
+                </select>
+                <input type="text" id="color" required placeholder="Color" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                <input type="number" id="cantidad" min="1" required placeholder="Cantidad" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                <input type="number" id="precio" min="0" step="0.01" required placeholder="Precio ($)" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                <div class="sm:col-span-3 pt-2">
+                    <button type="submit" class="btn-agregar w-full py-2 px-4 rounded-md shadow-md text-white bg-blue-600 hover:bg-blue-700 transition">
+                        Agregar Producto
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 🔍 BARRA DE BÚSQUEDA Y FILTROS -->
+        <section class="filtros-container bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Filtros de Inventario</h2>
+            <div class="filtro-buscar mb-4">
+                <input type="search" id="buscar" placeholder="Buscar por código o nombre..." class="w-full p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500" />
+            </div>
+
+            <div class="filtro-controles grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
+                <!-- Filtros (Talla, Color, Stock, Precios) ... -->
+                <select id="filtro-talla" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                    <option value="">Talla</option>
+                    <optgroup label="Ropa">
+                        <option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option><option value="U">U</option>
+                    </optgroup>
+                    <optgroup label="Calzado (EU)">
+                        <option value="32">32</option><option value="33">33</option><option value="34">34</option><option value="35">35</option><option value="36">36</option>
+                        <option value="37">37</option><option value="38">38</option><option value="39">39</option><option value="40">40</option><option value="41">41</option>
+                        <option value="42">42</option><option value="43">43</option><option value="44">44</option><option value="45">45</option><option value="46">46</option>
+                        <option value="47">47</option><option value="48">48</option>
+                    </optgroup>
+                </select>
+                <input type="text" id="filtro-color" placeholder="Color" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500" />
+                <select id="filtro-stock" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500"><option value="">Stock</option><option value="agotado">Agotado</option><option value="bajo">Bajo</option><option value="ok">OK</option></select>
+                <input type="number" id="filtro-precio-min" min="0" placeholder="Precio min" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500" />
+                <input type="number" id="filtro-precio-max" min="0" placeholder="Precio max" class="p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500" />
+                <button id="limpiar-filtros" class="btn-limpiar w-full py-2 px-4 rounded-md shadow-md text-white bg-gray-500 hover:bg-gray-600 transition">
+                    Limpiar
+                </button>
+            </div>
+        </section>
+
+        <!-- 📋 TABLA DEL INVENTARIO -->
+        <section class="tabla-container bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg overflow-x-auto">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Lista de Inventario</h2>
+            <table id="tabla-inventario" class="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                <thead class="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Código</th>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Nombre</th>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Talla</th>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Color</th>
+                        <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cantidad</th>
+                        <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Precio</th>
+                        <th id="acciones-header" class="px-6 py-3 text-center text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
+                    <!-- Productos inyectados -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <!-- ====================================== -->
+    <!-- MÓDULO DE VENTAS -->
+    <!-- ====================================== -->
+    <div id="module-ventas" class="tab-content hidden max-w-7xl mx-auto space-y-8">
+        
+        <!-- 💵 REGISTRAR VENTA -->
+        <section class="form-container bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Registrar Nueva Venta</h2>
+            
+            <form id="form-venta" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Selector de Producto -->
+                    <div>
+                        <label for="venta-producto" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Producto (Código - Nombre)</label>
+                        <select id="venta-producto" required class="mt-1 w-full p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                            <option value="">Seleccione un producto</option>
+                            <!-- Opciones cargadas por JS -->
+                        </select>
+                    </div>
+
+                    <!-- Cantidad a vender -->
+                    <div>
+                        <label for="venta-cantidad" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Cantidad</label>
+                        <input type="number" id="venta-cantidad" min="1" value="1" required class="mt-1 w-full p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                    </div>
+
+                    <!-- Precio Final (por si hay descuento) -->
+                    <div>
+                        <label for="venta-precio-final" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Precio Unitario Final ($)</label>
+                        <input type="number" id="venta-precio-final" min="0" step="0.01" required class="mt-1 w-full p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                    </div>
+                </div>
+                
+                <!-- Detalles de la Venta (Opcional) -->
+                <div>
+                    <label for="venta-detalle" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Detalle de la Venta (Cliente, Descuento, etc.)</label>
+                    <input type="text" id="venta-detalle" placeholder="Ej: Cliente Juan Pérez, 10% descuento" class="mt-1 w-full p-2 border rounded-md shadow-sm bg-gray-50 dark:bg-gray-600 dark:text-white dark:border-gray-500">
+                </div>
+
+                <div class="pt-2">
+                    <button type="submit" class="w-full py-2 px-4 rounded-md shadow-md text-white bg-emerald-600 hover:bg-emerald-700 transition">
+                        Confirmar Venta y Descontar Stock
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 🧾 RESUMEN DE VENTAS (SOLO ADMIN) -->
+        <section id="sales-dashboard-section" class="dashboard-ventas grid grid-cols-2 lg:grid-cols-4 gap-4 hidden">
+             <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-emerald-500 dark:border-emerald-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Ventas Totales (#)</h3>
+                <p id="stat-ventas-total" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">0</p>
+            </div>
+             <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-emerald-700 dark:border-emerald-500">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Ingreso Total ($)</h3>
+                <p id="stat-ingreso-total" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">$0.00</p>
+            </div>
+             <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-yellow-500 dark:border-yellow-400">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Ventas de Hoy</h3>
+                <p id="stat-ventas-hoy" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">0</p>
+            </div>
+             <div class="card bg-white dark:bg-gray-700 p-5 rounded-xl shadow-lg border-b-4 border-yellow-700 dark:border-yellow-500">
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-300">Ingreso de Hoy ($)</h3>
+                <p id="stat-ingreso-hoy" class="text-3xl font-bold mt-1 text-gray-800 dark:text-white">$0.00</p>
+            </div>
+        </section>
+        
+        <!-- 📈 GRÁFICOS DE VENTAS INTEGRADOS (SOLO ADMIN) -->
+        <div id="sales-charts-section" class="charts grid grid-cols-1 lg:grid-cols-2 gap-6 hidden">
+            
+            <div class="chart-card bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+                <h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Top 5 Productos más Vendidos (Unidades)</h4>
+                <div style="height:250px;">
+                    <canvas id="chart-sales-top-products"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg">
+                <h4 class="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Distribución de Ingresos por Mes</h4>
+                <div style="height:250px;">
+                    <canvas id="chart-sales-monthly-revenue"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📜 HISTORIAL DE VENTAS -->
+        <section class="tabla-container bg-white dark:bg-gray-700 p-6 rounded-xl shadow-lg overflow-x-auto">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Historial de Ventas</h2>
+            <table id="tabla-ventas" class="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                <thead class="bg-gray-50 dark:bg-gray-800">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Fecha</th>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Código/Producto</th>
+                        <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Cantidad</th>
+                        <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Precio Unitario</th>
+                        <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Venta</th>
+                        <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Detalle</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
+                    <!-- Ventas inyectadas -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+</main>
+
+<script>
+    // =========================================================
+    // 1. CONFIGURACIÓN Y CONSTANTES GLOBALES
+    // =========================================================
+    const INVENTORY_STORAGE_KEY = 'inventoryData_v1';
+    const SALES_STORAGE_KEY = 'salesData_v1';
+    const USER_STORAGE_KEY = 'userData_v1'; 
+    
+    let charts = {}; 
+    let currentTab = 'inventario'; 
+    let currentUser = null; 
+    
+    // Roles para permisos
+    const ROLES = {
+        ADMIN: 'admin',
+        EMPLOYEE: 'employee'
+    };
+
+    // Contraseñas predefinidas para el acceso local simulado
+    // Contraseñas: Admin: Gior&Co2026*, Trabajador: Gior2026*
+    const PASSWORDS = {
+        'Gior&Co2026*': { role: ROLES.ADMIN, username: 'Administrador' }, 
+        'Gior2026*': { role: ROLES.EMPLOYEE, username: 'Trabajador' }    
+    };
+
+    // =========================================================
+    // 2. LÓGICA DE AUTENTICACIÓN (LOGIN POR CONTRASEÑA LOCAL)
+    // =========================================================
+
+    // Muestra/Oculta el modal de login
+    function showLoginModal() {
+        // Limpia la contraseña al mostrar el modal
+        document.getElementById('password-input').value = ''; 
+        document.getElementById('login-modal').classList.remove('hidden');
+        // Oculta el contenido principal mientras no haya sesión
+        document.getElementById('app-content').classList.add('hidden');
+        currentUser = null; // Cierra la sesión
+        updateUIPermissions(); // Limpia la información de usuario en el header
+    }
+    window.showLoginModal = showLoginModal; // Exportar para el botón "Cerrar Sesión"
+
+    function hideLoginModal() {
+        document.getElementById('login-modal').classList.add('hidden');
+        // Muestra el contenido principal solo si hay un usuario logueado
+        if (currentUser) {
+            document.getElementById('app-content').classList.remove('hidden');
+        }
+    }
+
+    // Oculta el modal de edición
+    function hideEditModal() {
+        document.getElementById('edit-modal').classList.add('hidden');
+    }
+    window.hideEditModal = hideEditModal; // Exportar para el botón "Cancelar"
+
+    // Maneja el intento de login con contraseña
+    function handleLogin(e) {
+        e.preventDefault();
+        const password = document.getElementById('password-input').value.trim();
+        
+        const userConfig = PASSWORDS[password];
+
+        if (userConfig) {
+            // Asigna el usuario basado en la contraseña
+            currentUser = {
+                username: userConfig.username,
+                role: userConfig.role,
+                id: crypto.randomUUID() // ID temporal
+            };
+
+            hideLoginModal();
+            loadInventoryAndRefreshUI();
+            updateUIPermissions(); // Ajustar la UI inmediatamente
+            showNotification(`Bienvenido, ${currentUser.username}. Rol: ${currentUser.role === ROLES.ADMIN ? 'Administrador' : 'Trabajador'}`, 'info', 3000);
+        } else {
+            showNotification("Contraseña incorrecta. Intente de nuevo.", 'error', 3000);
+        }
+    }
+
+    // Verifica si el usuario actual tiene el rol requerido
+    function checkPermissions(requiredRole) {
+        return currentUser && currentUser.role === requiredRole;
+    }
+
+    // Ajusta la visibilidad de elementos según el rol
+    function updateUIPermissions() {
+        const isAdmin = checkPermissions(ROLES.ADMIN);
+        
+        // 1. Mostrar información del usuario actual en el header
+        const userDisplay = currentUser ? `${currentUser.username} (${isAdmin ? 'Admin' : 'Trabajador'})` : 'Cerrada';
+        document.getElementById('current-user-info').textContent = `Sesión: ${userDisplay}`;
+
+        // 2. Ocultar/Mostrar sección de agregar producto
+        const addProductSection = document.getElementById('add-product-section');
+        if (addProductSection) {
+            addProductSection.style.display = isAdmin ? 'block' : 'none';
+        }
+        
+        // 3. Ajustar el encabezado de "Acciones" en la tabla de inventario
+        const accionesHeader = document.getElementById('acciones-header');
+        if (accionesHeader) {
+             accionesHeader.style.display = isAdmin ? 'table-cell' : 'none';
+        }
+        
+        // 4. Ocultar/Mostrar la sección de gráficos de inventario
+        const inventoryChartsSection = document.getElementById('inventory-charts-section');
+        if (inventoryChartsSection) {
+            if (isAdmin) {
+                inventoryChartsSection.classList.remove('hidden');
+            } else {
+                inventoryChartsSection.classList.add('hidden');
+            }
+        }
+        
+        // 5. Ocultar/Mostrar la sección de dashboard de ventas 
+        const salesDashboardSection = document.getElementById('sales-dashboard-section');
+        if (salesDashboardSection) {
+            if (isAdmin) {
+                salesDashboardSection.classList.remove('hidden');
+            } else {
+                salesDashboardSection.classList.add('hidden');
+            }
+        }
+
+        // 6. Ocultar/Mostrar la sección de gráficos de ventas 
+        const salesChartsSection = document.getElementById('sales-charts-section');
+        if (salesChartsSection) {
+            if (isAdmin) {
+                salesChartsSection.classList.remove('hidden');
+            } else {
+                salesChartsSection.classList.add('hidden');
+            }
+        }
+
+
+        // 7. Refrescar la tabla para ocultar/mostrar botones de acción
+        if(currentTab === 'inventario' && currentUser) {
+             const inventory = loadInventory();
+             renderInventoryTable(applyFilters(inventory));
+        }
+    }
+
+    // =========================================================
+    // 3. UTILIDADES
+    // =========================================================
+
+    function showNotification(message, type = 'success', duration = 3000) {
+        const container = document.getElementById('notificaciones');
+        const notification = document.createElement('div');
+        notification.className = `notificacion-item ${type === 'success' ? 'bg-success' : (type === 'error' ? 'bg-error' : 'bg-info')} transition-all duration-300 opacity-0`;
+        notification.textContent = message;
+        
+        container.appendChild(notification);
+        
+        // Fade in
+        setTimeout(() => notification.classList.remove('opacity-0'), 10);
+
+        // Fade out and remove
+        setTimeout(() => {
+            notification.classList.add('opacity-0');
+            notification.addEventListener('transitionend', () => notification.remove());
+        }, duration);
+    }
+
+    const formatCurrency = (amount) => {
+        if (typeof amount !== 'number') return '$0.00';
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    };
+
+    const getTodayDateString = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    function getThemeColors() {
+        const isDark = document.documentElement.classList.contains('dark');
+        return {
+            textColor: isDark ? '#f3f4f6' : '#1f2937',
+            gridColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+        };
+    }
+
+    // =========================================================
+    // 4. LÓGICA DE INVENTARIO (MÓDULO 1) - CON PERMISOS
+    // =========================================================
+    
+    // Persistencia (LocalStorage)
+    const loadInventory = () => JSON.parse(localStorage.getItem(INVENTORY_STORAGE_KEY) || '[]');
+    const saveInventory = (inventory) => localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inventory));
+
+    const addProduct = (productData) => {
+        // PERMISO: SOLO ADMIN
+        if (!checkPermissions(ROLES.ADMIN)) {
+            return showNotification("Acceso denegado. Solo los administradores pueden agregar productos.", 'error');
+        }
+        
+        let inventory = loadInventory();
+        
+        // La validación de código duplicado se mantiene, pero es menos estricta
+        // si se acepta que diferentes tallas/colores pueden tener el mismo código, 
+        // pero la data actual usa un código único para cada variante.
+        // Mantenemos la validación de código único.
+        if (inventory.some(p => p.codigo === productData.codigo && p.talla === productData.talla && p.color === productData.color)) {
+            return showNotification(`Error: Ya existe un producto con el mismo Código (${productData.codigo}), Talla (${productData.talla}) y Color (${productData.color}).`, 'error');
+        }
+        
+        productData.id = crypto.randomUUID(); 
+        inventory.push(productData);
+        
+        saveInventory(inventory);
+        showNotification(`Producto ${productData.nombre} (${productData.talla}) agregado con éxito.`);
+        document.getElementById('form-producto').reset();
+        loadInventoryAndRefreshUI(); 
+    };
+
+    const deleteProduct = (id, name) => {
+        // PERMISO: SOLO ADMIN
+        if (!checkPermissions(ROLES.ADMIN)) {
+            return showNotification("Acceso denegado. Solo los administradores pueden eliminar productos.", 'error');
+        }
+
+        // Usar un modal custom en un entorno real, aquí usamos un prompt para simularlo
+        if (!window.confirm(`¿Está seguro de eliminar ${name}?`)) return;
+
+        let inventory = loadInventory();
+        const initialLength = inventory.length;
+        
+        inventory = inventory.filter(p => p.id !== id);
+        
+        if (inventory.length < initialLength) {
+            saveInventory(inventory);
+            showNotification(`Producto ${name} eliminado.`);
+            loadInventoryAndRefreshUI();
+        } else {
+            showNotification("Error: Producto no encontrado.", 'error');
+        }
+    };
+    
+    // Función para precargar y mostrar el modal de edición
+    function editProduct(id) {
+        // PERMISO: SOLO ADMIN
+        if (!checkPermissions(ROLES.ADMIN)) {
+            return showNotification("Acceso denegado. Solo los administradores pueden editar productos.", 'error');
+        }
+
+        const inventory = loadInventory();
+        const product = inventory.find(p => p.id === id);
+
+        if (!product) {
+            return showNotification("Error: Producto a editar no encontrado.", 'error');
+        }
+
+        // 1. Llenar el formulario del modal
+        document.getElementById('edit-id').value = product.id;
+        document.getElementById('edit-codigo').value = product.codigo;
+        document.getElementById('edit-nombre').value = product.nombre;
+        document.getElementById('edit-talla').value = product.talla;
+        document.getElementById('edit-color').value = product.color;
+        document.getElementById('edit-cantidad').value = product.cantidad;
+        document.getElementById('edit-precio').value = product.precio;
+
+        // 2. Mostrar el modal
+        document.getElementById('edit-modal').classList.remove('hidden');
+    }
+    window.editProduct = editProduct; // Exportar para el botón "Editar"
+
+    // Función para guardar los cambios del producto
+    function saveEditedProduct(e) {
+        e.preventDefault();
+
+        // PERMISO: SOLO ADMIN (ya se valida al abrir el modal, pero es buena práctica)
+        if (!checkPermissions(ROLES.ADMIN)) {
+            hideEditModal();
+            return showNotification("Acceso denegado.", 'error');
+        }
+
+        const productId = document.getElementById('edit-id').value;
+        const newProductData = {
+            id: productId,
+            codigo: document.getElementById('edit-codigo').value.trim(),
+            nombre: document.getElementById('edit-nombre').value.trim(),
+            talla: document.getElementById('edit-talla').value,
+            color: document.getElementById('edit-color').value.trim(),
+            cantidad: parseInt(document.getElementById('edit-cantidad').value),
+            precio: parseFloat(document.getElementById('edit-precio').value),
+        };
+
+        if (isNaN(newProductData.cantidad) || newProductData.cantidad < 0 || isNaN(newProductData.precio) || newProductData.precio < 0 || newProductData.talla === '' || newProductData.codigo === '') {
+            return showNotification("Por favor, complete todos los campos obligatorios y asegúrese de que el stock/precio sean números válidos.", 'error');
+        }
+
+        let inventory = loadInventory();
+        const productIndex = inventory.findIndex(p => p.id === productId);
+
+        if (productIndex !== -1) {
+            // Actualizar el producto en el inventario
+            inventory[productIndex] = newProductData;
+            
+            saveInventory(inventory);
+            hideEditModal();
+            showNotification(`Producto ${newProductData.nombre} actualizado con éxito.`, 'success');
+            loadInventoryAndRefreshUI(); 
+        } else {
+            hideEditModal();
+            showNotification("Error: No se pudo encontrar el producto para actualizar.", 'error');
+        }
+    }
+
+    const updateStock = (id, name, delta) => {
+        // PERMISO: SOLO ADMIN
+        if (!checkPermissions(ROLES.ADMIN)) {
+            return showNotification("Acceso denegado. Solo los administradores pueden ajustar el stock.", 'error');
+        }
+
+        let inventory = loadInventory();
+        const productIndex = inventory.findIndex(p => p.id === id);
+
+        if (productIndex !== -1) {
+            const product = inventory[productIndex];
+            const newCantidad = product.cantidad + delta;
+            
+            if (newCantidad < 0) {
+                return showNotification(`Error: No hay suficiente stock de ${name}.`, 'error');
+            }
+
+            inventory[productIndex].cantidad = newCantidad;
+            
+            saveInventory(inventory);
+            showNotification(`Stock de ${name} actualizado.`, 'success', 1500);
+            loadInventoryAndRefreshUI();
+        } else {
+            showNotification("Error: Producto no encontrado.", 'error');
+        }
+    };
+    
+    function updateInventoryDashboard(inventory) {
+        let totalItems = 0;
+        let totalValue = 0;
+        let exhausted = 0;
+        let lowStock = 0;
+
+        inventory.forEach(item => {
+            const cantidad = parseInt(item.cantidad);
+            const precio = parseFloat(item.precio);
+
+            if (!isNaN(cantidad)) totalItems += cantidad;
+            if (!isNaN(cantidad) && !isNaN(precio)) totalValue += cantidad * precio;
+
+            if (cantidad === 0) {
+                exhausted++;
+            } else if (cantidad <= 5 && cantidad > 0) {
+                lowStock++;
+            }
+        });
+
+        document.getElementById('stat-total').textContent = totalItems;
+        document.getElementById('stat-agotados').textContent = exhausted;
+        document.getElementById('stat-bajo').textContent = lowStock;
+        document.getElementById('stat-valor').textContent = formatCurrency(totalValue);
+    }
+
+    function updateInventoryCharts(inventory) {
+        // Ejecutar gráficos solo si el usuario es Admin
+        if (!checkPermissions(ROLES.ADMIN) || currentTab !== 'inventario') {
+            // Destruir gráficos de inventario si existen para liberar recursos
+            ['chart-stock-pie', 'chart-top-bar'].forEach(chartId => {
+                if (charts[chartId]) { charts[chartId].destroy(); delete charts[chartId]; }
+            });
+            return;
+        }
+
+        const { textColor, gridColor } = getThemeColors();
+        
+        
+        // --- 1. Gráfico de Pastel de Stock ---
+        let exhaustedCount = 0;
+        let lowStockCount = 0;
+        let okStockCount = 0;
+        inventory.forEach(item => {
+            const cantidad = parseInt(item.cantidad);
+            if (cantidad === 0) { exhaustedCount++; } else if (cantidad <= 5) { lowStockCount++; } else { okStockCount++; }
+        });
+
+        const pieData = {
+            labels: ['Agotado', 'Stock Bajo (≤5)', 'Stock OK (>5)'],
+            datasets: [{
+                data: [exhaustedCount, lowStockCount, okStockCount],
+                backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], // Rojo, Ámbar, Esmeralda
+                hoverOffset: 4
+            }]
+        };
+
+        const pieConfig = {
+            type: 'pie',
+            data: pieData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: textColor } }, title: { display: false } }
+            }
+        };
+
+        if (charts['chart-stock-pie']) { charts['chart-stock-pie'].destroy(); }
+        charts['chart-stock-pie'] = new Chart(document.getElementById('chart-stock-pie'), pieConfig);
+
+
+        // --- 2. Gráfico de Barras de Top Productos (Ranking por Ventas, mostrando Stock Agregado) ---
+        
+        // Cargar datos de ventas para el nuevo ranking
+        const sales = loadSales(); 
+
+        // a) Agregación de Stock por Nombre (para mostrar el stock total actual)
+        const aggregatedStock = inventory.reduce((acc, item) => {
+            acc[item.nombre] = (acc[item.nombre] || 0) + item.cantidad;
+            return acc;
+        }, {});
+
+        // b) Agregación de Ventas por Nombre (para el ranking)
+        const aggregatedSales = sales.reduce((acc, sale) => {
+            acc[sale.nombre] = (acc[sale.nombre] || 0) + sale.cantidad;
+            return acc;
+        }, {});
+
+        // c) Combinar, calcular el ranking y obtener el Top 5
+        const combinedData = Object.keys(aggregatedStock).map(nombre => ({
+            nombre: nombre,
+            stockTotal: aggregatedStock[nombre],
+            unidadesVendidas: aggregatedSales[nombre] || 0
+        }));
+
+        // d) Ordenar por unidades vendidas (Ranking de "más vendidos")
+        //    y tomar solo el top 5
+        const topProductsBySales = combinedData
+            .sort((a, b) => b.unidadesVendidas - a.unidadesVendidas)
+            .slice(0, 5);
+            
+        
+        const barData = {
+            // Etiqueta: Nombre del producto + unidades vendidas (para clarificar el ranking)
+            labels: topProductsBySales.map(p => `${p.nombre} (Vendidas: ${p.unidadesVendidas})`), 
+            datasets: [{
+                label: 'Stock Total Agregado',
+                // Data: Stock actual agregado (para visualizar el "buen stock")
+                data: topProductsBySales.map(p => p.stockTotal), 
+                backgroundColor: '#3b82f6', // Blue-500
+                borderColor: '#1e40af',
+                borderWidth: 1
+            }]
+        };
+
+        const barConfig = {
+            type: 'bar',
+            data: barData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, title: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } },
+                    x: { ticks: { color: textColor, autoSkip: false, maxRotation: 45, minRotation: 45 }, grid: { color: gridColor } }
+                }
+            }
+        };
+
+        if (charts['chart-top-bar']) { charts['chart-top-bar'].destroy(); }
+        charts['chart-top-bar'] = new Chart(document.getElementById('chart-top-bar'), barConfig);
+    }
+    
+    function applyFilters(inventory) {
+        const searchTerm = document.getElementById('buscar').value.toLowerCase().trim();
+        const filterTalla = document.getElementById('filtro-talla').value.trim();
+        const filterColor = document.getElementById('filtro-color').value.toLowerCase().trim();
+        const filterStock = document.getElementById('filtro-stock').value.trim();
+        const filterPriceMin = parseFloat(document.getElementById('filtro-precio-min').value) || 0;
+        const filterPriceMax = parseFloat(document.getElementById('filtro-precio-max').value) || Infinity;
+
+        return inventory.filter(item => {
+            const cantidad = parseInt(item.cantidad);
+            const precio = parseFloat(item.precio);
+
+            // Buscar por Código o Nombre
+            if (searchTerm && !(item.codigo.toLowerCase().includes(searchTerm) || item.nombre.toLowerCase().includes(searchTerm))) return false;
+            // Filtrar por Talla
+            if (filterTalla && item.talla !== filterTalla) return false;
+            // Filtrar por Color
+            if (filterColor && !item.color.toLowerCase().includes(filterColor)) return false;
+            // Filtrar por Stock
+            if (filterStock) {
+                if (filterStock === 'agotado' && cantidad !== 0) return false;
+                if (filterStock === 'bajo' && (cantidad === 0 || cantidad > 5)) return false;
+                if (filterStock === 'ok' && cantidad <= 5) return false;
+            }
+            // Filtrar por Rango de Precios
+            if (precio < filterPriceMin || precio > filterPriceMax) return false;
+            return true;
+        });
+    }
+
+    function renderInventoryTable(inventory) {
+        const tbody = document.querySelector('#tabla-inventario tbody');
+        tbody.innerHTML = '';
+        
+        // Determinar si mostrar la columna de acciones (solo Admin)
+        const isAdmin = checkPermissions(ROLES.ADMIN);
+        const accionesHeader = document.getElementById('acciones-header');
+        const isActionColumnVisible = isAdmin ? '' : 'hidden';
+        if (accionesHeader) {
+            accionesHeader.style.display = isAdmin ? 'table-cell' : 'none';
+        }
+
+        if (inventory.length === 0) {
+            const colspan = isAdmin ? 7 : 6;
+            const row = tbody.insertRow();
+            row.innerHTML = `<td colspan="${colspan}" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">No se encontraron productos.</td>`;
+            return;
+        }
+
+        inventory.forEach(item => {
+            const row = tbody.insertRow();
+            row.className = 'hover:bg-gray-50 dark:hover:bg-gray-600 transition duration-150 ease-in-out';
+            
+            if (item.cantidad === 0) {
+                row.classList.add('bg-red-50', 'dark:bg-red-900', 'bg-opacity-50', 'dark:bg-opacity-20');
+            } else if (item.cantidad <= 5) {
+                row.classList.add('bg-amber-50', 'dark:bg-amber-900', 'bg-opacity-50', 'dark:bg-opacity-20');
+            }
+
+            // Botones de acción (solo si es Admin)
+            const actionButtons = isAdmin ? `
+                <div class="flex space-x-2 justify-center items-center">
+                    <button class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-200" title="Editar producto" onclick="editProduct('${item.id}')">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    </button>
+                    <button class="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-200" title="Añadir stock" onclick="updateStockWrapper('${item.id}', '${item.nombre} - ${item.talla}', 1)">
+                        +1
+                    </button>
+                    <button class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200" title="Quitar stock" onclick="updateStockWrapper('${item.id}', '${item.nombre} - ${item.talla}', -1)">
+                        -1
+                    </button>
+                    <button class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200" title="Eliminar producto" onclick="deleteProductWrapper('${item.id}', '${item.nombre} - ${item.talla}')">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            ` : '';
+
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white" data-label="Código">${item.codigo}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300" data-label="Nombre">${item.nombre}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300" data-label="Talla">${item.talla}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300" data-label="Color">${item.color}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold" data-label="Cantidad">${item.cantidad}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 dark:text-green-400" data-label="Precio">${formatCurrency(item.precio)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium ${isActionColumnVisible}" data-label="Acciones">${actionButtons}</td>
+            `;
+            // Ocultar celda de acciones en móvil si no es Admin
+            if (!isAdmin) {
+                // Find the action cell by its data-label (mobile view) or column index (desktop view)
+                const lastCell = row.cells[row.cells.length - 1];
+                if (lastCell) {
+                    lastCell.classList.add('hidden');
+                }
+            }
+        });
+    }
+
+    // Exportar wrappers para hacerlos accesibles desde el ámbito global (atributos onclick)
+    window.updateStockWrapper = (id, name, delta) => updateStock(id, name, delta);
+    window.deleteProductWrapper = (id, name) => deleteProduct(id, name);
+
+    // =========================================================
+    // 5. LÓGICA DE VENTAS (MÓDULO 2) - ABIERTO PARA AMBOS ROLES
+    // =========================================================
+
+    // Persistencia (LocalStorage)
+    const loadSales = () => JSON.parse(localStorage.getItem(SALES_STORAGE_KEY) || '[]');
+    const saveSales = (sales) => localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(sales));
+    
+    function populateSaleProductSelector() {
+        const inventory = loadInventory();
+        const selector = document.getElementById('venta-producto');
+        selector.innerHTML = '<option value="">Seleccione un producto</option>';
+
+        inventory.forEach(item => {
+            // Solo agregar productos con stock > 0
+            if (item.cantidad > 0) {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = `${item.codigo} - ${item.nombre} (Talla: ${item.talla}, Stock: ${item.cantidad})`;
+                option.dataset.precio = item.precio; 
+                option.dataset.talla = item.talla;
+                selector.appendChild(option);
+            }
+        });
+    }
+
+    function handleProductChange() {
+        const selector = document.getElementById('venta-producto');
+        const precioInput = document.getElementById('venta-precio-final');
+        const cantidadInput = document.getElementById('venta-cantidad');
+        const selectedOption = selector.options[selector.selectedIndex];
+
+        if (selectedOption && selectedOption.value) {
+            const basePrice = parseFloat(selectedOption.dataset.precio);
+            precioInput.value = basePrice;
+            
+            // Ajustar el límite de cantidad según el stock
+            const stockText = selectedOption.textContent.match(/Stock: (\d+)/);
+            if (stockText && stockText[1]) {
+                const maxStock = parseInt(stockText[1]);
+                cantidadInput.setAttribute('max', maxStock);
+                // Asegurar que la cantidad no exceda el stock si ya tenía un valor alto
+                if (parseInt(cantidadInput.value) > maxStock) {
+                    cantidadInput.value = maxStock > 0 ? 1 : 0;
+                }
+            } else {
+                 cantidadInput.setAttribute('max', 1);
+            }
+            
+        } else {
+            precioInput.value = '';
+            cantidadInput.removeAttribute('max');
+        }
+    }
+
+    const registerSale = (e) => {
+        e.preventDefault();
+
+        // Ambos roles (Trabajador y Administrador) tienen permiso para vender.
+        if (!currentUser) {
+            return showNotification("Debe iniciar sesión para registrar una venta.", 'error');
+        }
+
+        const selector = document.getElementById('venta-producto');
+        const selectedOption = selector.options[selector.selectedIndex];
+        
+        const productoId = selector.value;
+        const cantidad = parseInt(document.getElementById('venta-cantidad').value);
+        const precioFinal = parseFloat(document.getElementById('venta-precio-final').value);
+        const detalle = document.getElementById('venta-detalle').value.trim();
+
+        if (!productoId || isNaN(cantidad) || cantidad <= 0 || isNaN(precioFinal) || precioFinal < 0) {
+            return showNotification("Por favor, revise los datos de la venta.", 'error');
+        }
+
+        let inventory = loadInventory();
+        const productIndex = inventory.findIndex(p => p.id === productoId);
+
+        if (productIndex === -1) {
+            return showNotification("Error: Producto no encontrado en el inventario.", 'error');
+        }
+
+        const product = inventory[productIndex];
+
+        // VALIDACIÓN CRUCIAL DE STOCK
+        if (product.cantidad < cantidad) {
+            return showNotification(`Error: Stock insuficiente. Solo quedan ${product.cantidad} unidades de ${product.nombre}.`, 'error');
+        }
+
+        // 1. DESCONTAR STOCK (La acción solicitada)
+        product.cantidad -= cantidad;
+        saveInventory(inventory);
+        
+        // 2. REGISTRAR VENTA
+        let sales = loadSales();
+        const saleData = {
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            productoId: product.id,
+            codigo: product.codigo,
+            nombre: product.nombre,
+            talla: product.talla || selectedOption.dataset.talla, // Usa la talla del producto
+            cantidad: cantidad,
+            precioUnitario: precioFinal,
+            total: cantidad * precioFinal,
+            detalle: detalle,
+        };
+        sales.unshift(saleData); 
+        saveSales(sales);
+
+        showNotification(`Venta de ${cantidad} x ${product.nombre} (${product.talla}) por ${formatCurrency(saleData.total)} registrada.`, 'success');
+        document.getElementById('form-venta').reset();
+        
+        // Refrescar ambas UI
+        loadInventoryAndRefreshUI();
+    };
+
+    function updateSalesDashboard(sales) {
+         // Ejecutar dashboard solo si el usuario es Admin
+        if (!checkPermissions(ROLES.ADMIN) || currentTab !== 'ventas') {
+             // Limpiar valores del dashboard si no es admin
+            document.getElementById('stat-ventas-total').textContent = '0';
+            document.getElementById('stat-ingreso-total').textContent = '$0.00';
+            document.getElementById('stat-ventas-hoy').textContent = '0';
+            document.getElementById('stat-ingreso-hoy').textContent = '$0.00';
+            return;
+        }
+
+        const today = getTodayDateString();
+        let totalSalesCount = 0;
+        let totalRevenue = 0;
+        let todaySalesCount = 0;
+        let todayRevenue = 0;
+
+        sales.forEach(sale => {
+            totalSalesCount += sale.cantidad;
+            totalRevenue += sale.total;
+
+            const saleDate = sale.timestamp.substring(0, 10);
+            if (saleDate === today) {
+                todaySalesCount += sale.cantidad;
+                todayRevenue += sale.total;
+            }
+        });
+
+        document.getElementById('stat-ventas-total').textContent = totalSalesCount;
+        document.getElementById('stat-ingreso-total').textContent = formatCurrency(totalRevenue);
+        document.getElementById('stat-ventas-hoy').textContent = todaySalesCount;
+        document.getElementById('stat-ingreso-hoy').textContent = formatCurrency(todayRevenue);
+    }
+
+    function renderSalesHistory(sales) {
+        const tbody = document.querySelector('#tabla-ventas tbody');
+        tbody.innerHTML = '';
+
+        if (sales.length === 0) {
+            const row = tbody.insertRow();
+            row.innerHTML = `<td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">No hay ventas registradas.</td>`;
+            return;
+        }
+
+        sales.forEach(sale => {
+            const row = tbody.insertRow();
+            const date = new Date(sale.timestamp);
+            const formattedDate = date.toLocaleDateString('es-ES') + ' ' + date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300" data-label="Fecha">${formattedDate}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white" data-label="Producto">${sale.codigo} - ${sale.nombre} (${sale.talla || '-'})</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right" data-label="Cantidad">${sale.cantidad}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right" data-label="Precio Unitario">${formatCurrency(sale.precioUnitario)}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-emerald-600 dark:text-emerald-400" data-label="Total Venta">${formatCurrency(sale.total)}</td>
+                <td class="px-6 py-4 whitespace-normal text-xs text-gray-500 dark:text-gray-300" data-label="Detalle">${sale.detalle || '-'}</td>
+            `;
+        });
+    }
+
+    // Gráficos de Ventas
+    function updateSalesCharts(sales) {
+        // Ejecutar gráficos solo si el usuario es Admin
+        if (!checkPermissions(ROLES.ADMIN) || currentTab !== 'ventas') {
+            // Destruir gráficos de ventas si existen para liberar recursos
+            ['chart-sales-top-products', 'chart-sales-monthly-revenue'].forEach(chartId => {
+                if (charts[chartId]) { charts[chartId].destroy(); delete charts[chartId]; }
+            });
+            return;
+        }
+        
+        const { textColor, gridColor } = getThemeColors();
+        
+        // 1. Lógica para el Top 5 de Productos Vendidos (Gráfico de Barras)
+        const productSales = sales.reduce((acc, sale) => {
+            // Agrupar por producto y talla para un desglose más preciso en el top de ventas
+            const key = `${sale.nombre} (Talla: ${sale.talla || 'N/A'})`; 
+            acc[key] = (acc[key] || 0) + sale.cantidad;
+            return acc;
+        }, {});
+
+        const topProducts = Object.entries(productSales)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5);
+
+        const topProductsData = {
+            labels: topProducts.map(([name]) => name),
+            datasets: [{
+                label: 'Unidades Vendidas',
+                data: topProducts.map(([, count]) => count),
+                backgroundColor: '#10b981', // Emerald-500
+                borderColor: '#047857',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        };
+
+        const topProductsConfig = {
+            type: 'bar',
+            data: topProductsData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, title: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } },
+                    x: { ticks: { color: textColor, autoSkip: false, maxRotation: 45, minRotation: 45 }, grid: { color: gridColor } }
+                }
+            }
+        };
+
+        if (charts['chart-sales-top-products']) { charts['chart-sales-top-products'].destroy(); }
+        charts['chart-sales-top-products'] = new Chart(document.getElementById('chart-sales-top-products'), topProductsConfig);
+
+
+        // 2. Lógica para Distribución de Ingresos por Mes (Gráfico de Dona)
+        const monthlyRevenue = sales.reduce((acc, sale) => {
+            const date = new Date(sale.timestamp);
+            const monthYear = date.toLocaleString('es-ES', { month: 'short', year: 'numeric' });
+            acc[monthYear] = (acc[monthYear] || 0) + sale.total;
+            return acc;
+        }, {});
+
+        // Obtener los últimos 6 meses (o menos si hay menos datos)
+        const sortedMonths = Object.keys(monthlyRevenue).sort((a, b) => new Date(a) - new Date(b)).slice(-6);
+        const revenueValues = sortedMonths.map(month => monthlyRevenue[month]);
+        
+        const monthlyColors = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#ec4899']; // Colores variados
+        
+        const monthlyRevenueData = {
+            labels: sortedMonths,
+            datasets: [{
+                data: revenueValues,
+                backgroundColor: monthlyColors,
+                hoverOffset: 10
+            }]
+        };
+
+        const monthlyRevenueConfig = {
+            type: 'doughnut',
+            data: monthlyRevenueData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: textColor, boxWidth: 10, padding: 15 } },
+                    title: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed;
+                                return `${label}: ${formatCurrency(value)}`;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        if (charts['chart-sales-monthly-revenue']) { charts['chart-sales-monthly-revenue'].destroy(); }
+        charts['chart-sales-monthly-revenue'] = new Chart(document.getElementById('chart-sales-monthly-revenue'), monthlyRevenueConfig);
+    }
+
+
+    // =========================================================
+    // 6. NAVEGACIÓN Y CARGA INICIAL
+    // =========================================================
+    
+    // Función central de refresco
+    function loadInventoryAndRefreshUI() {
+        if (!currentUser) return;
+
+        const inventory = loadInventory();
+        const sales = loadSales();
+        
+        // Inventario UI
+        const filteredData = applyFilters(inventory);
+        renderInventoryTable(filteredData);
+        updateInventoryDashboard(inventory); 
+        updateInventoryCharts(inventory); 
+        
+        // Ventas UI
+        populateSaleProductSelector(inventory);
+        updateSalesDashboard(sales); 
+        renderSalesHistory(sales);
+        updateSalesCharts(sales); 
+
+        // Aplicar permisos después de cargar/refrescar todo
+        updateUIPermissions();
+    }
+
+    // Maneja el cambio de pestañas
+    function switchTab(tabName) {
+        if (!currentUser) return showLoginModal();
+        
+        currentTab = tabName;
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.add('hidden');
+        });
+        document.getElementById(`module-${tabName}`).classList.remove('hidden');
+
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.classList.remove('tab-active');
+        });
+        document.getElementById(`tab-${tabName}`).classList.add('tab-active');
+        
+        loadInventoryAndRefreshUI();
+    }
+
+    // Maneja el Dark Mode
+    const htmlElement = document.documentElement;
+    const toggleDark = document.getElementById('toggle-dark');
+    const darkModeLabel = document.getElementById('dark-mode-label');
+    
+    function initializeDarkMode() {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            htmlElement.classList.add('dark');
+            darkModeLabel.textContent = 'Light';
+        } else {
+            darkModeLabel.textContent = 'Dark';
+        }
+    }
+
+    toggleDark.addEventListener('click', () => {
+        const isDark = htmlElement.classList.toggle('dark');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        if (currentUser) loadInventoryAndRefreshUI(); // Re-renderizar gráficos
+    });
+
+    // =========================================================
+    // 7. LISTENERS DE EVENTOS E INICIALIZACIÓN
+    // =========================================================
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeDarkMode();
+        
+        // Muestra el modal de login al inicio, forzando la autenticación
+        showLoginModal(); 
+
+        // 7.1 Listener de Login
+        document.getElementById('form-login').addEventListener('submit', handleLogin);
+        
+        // 7.2 Listener de Edición de Producto
+        document.getElementById('form-editar-producto').addEventListener('submit', saveEditedProduct);
+
+        // 7.3 Listeners de Navegación
+        document.getElementById('tab-inventario').addEventListener('click', () => switchTab('inventario'));
+        document.getElementById('tab-ventas').addEventListener('click', () => switchTab('ventas'));
+        
+        // 7.4 Listeners de Inventario
+        document.getElementById('form-producto').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const productData = {
+                codigo: document.getElementById('codigo').value.trim(),
+                nombre: document.getElementById('nombre').value.trim(),
+                talla: document.getElementById('talla').value,
+                color: document.getElementById('color').value.trim(),
+                cantidad: parseInt(document.getElementById('cantidad').value),
+                precio: parseFloat(document.getElementById('precio').value),
+            };
+            if (isNaN(productData.cantidad) || isNaN(productData.precio) || productData.codigo === '' || productData.talla === '') {
+                return showNotification("Por favor, complete todos los campos de producto correctamente.", 'error');
+            }
+            addProduct(productData);
+        });
+
+        const filterControls = ['buscar', 'filtro-talla', 'filtro-color', 'filtro-stock', 'filtro-precio-min', 'filtro-precio-max'];
+        filterControls.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('input', () => {
+                    if (!currentUser) return; // No filtrar si no hay usuario
+                    const currentInventory = loadInventory();
+                    const filteredData = applyFilters(currentInventory);
+                    renderInventoryTable(filteredData);
+                });
+            }
+        });
+
+        document.getElementById('limpiar-filtros').addEventListener('click', () => {
+            filterControls.forEach(id => document.getElementById(id).value = id.includes('filtro-stock') || id.includes('filtro-talla') ? '' : '');
+            if (currentUser) loadInventoryAndRefreshUI();
+        });
+        
+        // 7.5 Listeners de Ventas
+        document.getElementById('venta-producto').addEventListener('change', handleProductChange);
+        document.getElementById('form-venta').addEventListener('submit', registerSale);
+        
+        // Inicializar selector de cantidad para ventas
+        document.getElementById('venta-cantidad').addEventListener('input', (e) => {
+            const max = parseInt(e.target.getAttribute('max'));
+            if (max && parseInt(e.target.value) > max) {
+                 e.target.value = max;
+                 showNotification(`La cantidad máxima permitida es el stock disponible: ${max}`, 'error', 2000);
+            }
+            if (parseInt(e.target.value) < 1) {
+                e.target.value = 1;
+            }
+        });
+    });
+
+</script>
+
+</body>
+</html>
