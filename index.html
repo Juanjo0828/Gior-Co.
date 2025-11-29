@@ -420,6 +420,7 @@
                         <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Precio Unitario</th>
                         <th class="px-6 py-3 text-right text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Venta</th>
                         <th class="px-6 py-3 text-left text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Detalle</th>
+                        <th id="acciones-ventas-header" class="px-6 py-3 text-center text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
@@ -509,11 +510,16 @@
         const salesChartsSection = document.getElementById('sales-charts-section');
         const actionsHeader = document.getElementById('acciones-header');
         
+        // NUEVO: Cabecera de acciones de Ventas
+        const salesActionsHeader = document.getElementById('acciones-ventas-header');
+        
         if (addSection) addSection.classList.toggle('hidden', !isAdmin);
         if (chartsSection) chartsSection.classList.toggle('hidden', !isAdmin);
         if (salesDashboardSection) salesDashboardSection.classList.toggle('hidden', !isAdmin);
         if (salesChartsSection) salesChartsSection.classList.toggle('hidden', !isAdmin);
         if (actionsHeader) actionsHeader.style.display = isAdmin ? 'table-cell' : 'none'; 
+        // NUEVO: Mostrar/Ocultar cabecera de acciones de ventas
+        if (salesActionsHeader) salesActionsHeader.style.display = isAdmin ? 'table-cell' : 'none';
 
         renderInventoryTable();
         renderSalesTable();
@@ -594,7 +600,15 @@
     }
     
     function formatDate(isoString) {
+        // Validación básica para evitar el error de Invalid Date
+        if (!isoString || isoString.startsWith('Invalid')) {
+             return 'Fecha no válida';
+        }
         const date = new Date(isoString);
+        // Si la fecha es inválida después de la conversión
+        if (isNaN(date.getTime())) {
+            return 'Fecha no válida';
+        }
         return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
@@ -963,18 +977,47 @@
         const tbody = document.getElementById('tabla-ventas').querySelector('tbody');
         const sales = getSales().sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); 
         tbody.innerHTML = '';
+        // NUEVO: Permiso de administrador para ver acciones
+        const isAdmin = currentUser?.role === ROLES.ADMIN;
+        const salesActionsHeader = document.getElementById('acciones-ventas-header');
+        if (salesActionsHeader) {
+            salesActionsHeader.style.display = isAdmin ? 'table-cell' : 'none';
+        }
+
 
         sales.forEach(sale => {
             const row = tbody.insertRow();
             row.className = 'hover:bg-gray-50 dark:hover:bg-gray-600 transition duration-150';
 
             row.insertCell().innerHTML = formatDate(sale.fecha);
-            row.insertCell().innerHTML = `${sale.codigoProducto} - ${sale.nombreProducto} (Vendedor: ${sale.vendedor})`;
+            // row.insertCell().innerHTML = `${sale.codigoProducto} - ${sale.nombreProducto} (Vendedor: ${sale.vendedor})`; // Código original con el error
+            // NUEVO: Corregir el formato de la columna de producto
+            row.insertCell().innerHTML = `
+                <div class="font-medium text-gray-900 dark:text-white">${sale.codigoProducto} - ${sale.nombreProducto}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Vendedor: ${sale.vendedor}</div>
+            `;
+            
             row.insertCell().innerHTML = sale.cantidad;
             row.insertCell().innerHTML = formatCurrency(sale.precioUnitario);
             row.insertCell().innerHTML = formatCurrency(sale.totalVenta);
             row.insertCell().innerHTML = sale.detalle || '-';
             
+            // NUEVO: Celda de acciones para el administrador
+            const actionsCell = row.insertCell();
+            actionsCell.className = 'px-6 py-4 whitespace-nowrap text-center';
+            actionsCell.setAttribute('data-label', 'Acciones');
+            
+            if (isAdmin) {
+                actionsCell.style.display = 'table-cell';
+                actionsCell.innerHTML = `
+                    <button onclick="deleteSale('${sale.id}')" class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200 transition">
+                        Eliminar
+                    </button>
+                `;
+            } else {
+                 actionsCell.style.display = 'none';
+            }
+
             row.cells[0].setAttribute('data-label', 'Fecha');
             row.cells[1].setAttribute('data-label', 'Producto');
             row.cells[2].setAttribute('data-label', 'Cantidad');
@@ -983,6 +1026,54 @@
             row.cells[5].setAttribute('data-label', 'Detalle');
         });
     }
+
+    // NUEVO: Función para eliminar una venta
+    function deleteSale(id) {
+        if (currentUser?.role !== ROLES.ADMIN) {
+            showNotification('Permiso denegado. Solo Administradores pueden eliminar ventas.', 'error');
+            return;
+        }
+
+        if (!confirm('¿Está seguro de que desea **ELIMINAR** este registro de venta? Se **REVERTIRÁ** la cantidad al inventario.')) {
+            return;
+        }
+
+        let sales = getSales();
+        const saleIndex = sales.findIndex(s => s.id === id);
+
+        if (saleIndex === -1) {
+            showNotification('Error: Registro de venta no encontrado.', 'error');
+            return;
+        }
+
+        const saleToDelete = sales[saleIndex];
+        let inventory = getInventory();
+        const productIndex = inventory.findIndex(p => p.id === saleToDelete.idProducto);
+
+        if (productIndex !== -1) {
+            // Revertir el stock
+            inventory[productIndex].cantidad += saleToDelete.cantidad;
+            saveInventory(inventory);
+            showNotification(`Stock de ${saleToDelete.nombreProducto} revertido: +${saleToDelete.cantidad} unidades.`, 'info');
+        } else {
+            showNotification('Advertencia: Producto original no encontrado en el inventario. Solo se elimina el registro de venta.', 'warning');
+        }
+
+        // Eliminar el registro de venta
+        sales.splice(saleIndex, 1);
+        saveSales(sales);
+        
+        showNotification('Venta eliminada con éxito y stock reajustado.', 'success');
+        
+        // Recargar tablas y paneles
+        if (currentTab === 'inventario') loadInventoryAndRefreshUI(); 
+        if (currentTab === 'ventas') {
+             updateSalesDashboard();
+             initSalesCharts();
+        }
+        renderSalesTable();
+    }
+    window.deleteSale = deleteSale; // Exportar la función para uso en HTML
 
     function createChart(ctxId, type, data, options) {
         if (charts[ctxId]) {
